@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Musician: TurtleBot4 Conductor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <!-- Header -->
+    <header class="bg-blue-600 text-white py-6">
+        <div class="container mx-auto px-4">
+            <h1 class="text-3xl font-bold">Robot Musician: TurtleBot4 Conductor</h1>
+            <p class="mt-2 text-lg">CS Group Project - Hand-Tracking Musical Performance</p>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- Video Demonstration -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-semibold mb-4">Video Demonstration</h2>
+            <p class="mb-4">This 5-minute video showcases our TurtleBot4 tracking hand movements to play music based on conductor gestures.</p>
+            <div class="w-full max-w-4xl mx-auto">
+                <!-- Replace with your video URL -->
+                <iframe class="w-full h-64 md:h-96" src="https://www.youtube.com/embed/your-video-id" frameborder="0" allowfullscreen title="TurtleBot4 Robot Musician Demo"></iframe>
+            </div>
+        </section>
+
+        <!-- Poster -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-semibold mb-4">Project Poster</h2>
+            <p class="mb-4">Our poster provides a high-level overview of the Robot Musician project, detailing the system design and functionality.</p>
+            <div class="w-full max-w-4xl mx-auto">
+                <!-- Replace with your SVG file path -->
+                <img src="assets/Robotic Musician Poster.svg" alt="Robotic Musician Project Poster" class="w-full h-auto border shadow-lg">
+                <a href="robot-musician/assets/Robotic Musician Poster-2 (1).pdf" class="text-blue-600 hover:underline mt-2 inline-block">Download Poster (PDF)</a>
+            </div>
+        </section>
+
+        <!-- Source Code -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-semibold mb-4">Source Code & Documentation</h2>
+            <p class="mb-4">Below is the documentation for our project, including the source code, README, and dependency details.</p>
+
+            <!-- README -->
+            <div class="bg-white p-6 rounded-lg shadow-lg mb-6">
+                <h3 class="text-xl font-medium mb-2">README</h3>
+                <pre class="bg-gray-100 p-4 rounded overflow-x-auto">
+# Robot Musician: TurtleBot4 Conductor
+
+## Overview
+This project uses a TurtleBot4 to track a conductor's hand movements via a camera and translate them into musical performance. The system uses OpenCV and MediaPipe for gesture recognition and Pygame for audio synthesis.
+
+## Dependencies
+- ROS 2 Humble: [Installation Guide](https://docs.ros.org/en/humble/Installation.html)
+- OpenCV: `pip install opencv-python`
+- NumPy: `pip install numpy`
+- MediaPipe: `pip install mediapipe`
+- Pygame: `pip install pygame`
+- TurtleBot4 ROS Packages: [TurtleBot4 Setup](https://turtlebot.github.io/turtlebot4/setup/ros2.html)
+
+## Installation
+1. Install ROS 2 Humble.
+2. Set up a ROS 2 workspace:
+   ```bash
+   mkdir -p ~/ros2_ws/src
+   cd ~/ros2_ws/src
+   ```
+3. Clone the repository:
+   ```bash
+   git clone https://github.com/your-repo/robot-musician.git
+   ```
+4. Build and source:
+   ```bash
+   cd ~/ros2_ws
+   colcon build
+   source install/setup.bash
+   ```
+
+## Running
+1. Launch TurtleBot4:
+   ```bash
+   ros2 launch turtlebot4_bringup standard.launch.py
+   ```
+2. Run conductor node:
+   ```bash
+   ros2 run robot_musician conductor
+   ```
+
+## Known Issues
+- Hand tracking fails in low-light conditions. Adjusted camera exposure, but performance varies.
+- Tempo detection lags with rapid gestures. Optimized frame rate, but further tuning needed.
+
+## Contributing to ROS
+We plan to contribute our hand-tracking ROS node. See [ROS Contribution Guide](https://docs.ros.org/en/rolling/Contributing.html).
+                </pre>
+            </div>
+
+            <!-- Sample Code -->
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-xl font-medium mb-2">Sample Code: Hand Tracking Module</h3>
+                <pre class="bg-gray-100 p-4 rounded overflow-x-auto">
+#!/usr/bin/env python3
+import rclpy
+from rclpy.node import Node
+import cv2
+import mediapipe as mp
+import numpy as np
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+
+class HandTracker(Node):
+    """
+    ROS 2 Node to track hand movements using TurtleBot4's camera and MediaPipe.
+    """
+    def __init__(self):
+        super().__init__('hand_tracker')
+        self.bridge = CvBridge()
+        self.sub = self.create_subscription(
+            Image, '/camera/image_raw', self.image_callback, 10)
+        self.mp_hands = mp.solutions.hands.Hands()
+        self.position_history = []
+        self.velocity_threshold = 50  # Pixels per frame
+        self.debounce_ms = 300
+        self.last_beat_time = 0
+
+    def image_callback(self, msg):
+        """
+        Process camera images to detect hand position and calculate beat tempo.
+        
+        Args:
+            msg (sensor_msgs.msg.Image): Raw camera image
+        
+        Returns:
+            None
+        """
+        cv_image = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+        rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+        results = self.mp_hands.process(rgb_image)
+        
+        if results.multi_hand_landmarks:
+            # Track index finger tip (landmark 8)
+            hand_landmarks = results.multi_hand_landmarks[0]
+            cx = int(hand_landmarks.landmark[8].x * cv_image.shape[1])
+            cy = int(hand_landmarks.landmark[8].y * cv_image.shape[0])
+            
+            # Smooth position with rolling average
+            self.position_history.append((cx, cy))
+            if len(self.position_history) > 10:
+                self.position_history.pop(0)
+            smoothed_pos = np.mean(self.position_history, axis=0)
+            
+            # Calculate velocity and detect beats
+            if len(self.position_history) >= 2:
+                velocity = np.linalg.norm(np.array(smoothed_pos) - np.array(self.position_history[-2]))
+                current_time = self.get_clock().now().nanoseconds / 1e6
+                if (velocity > self.velocity_threshold and
+                    current_time - self.last_beat_time > self.debounce_ms):
+                    self.get_logger().info(f'Beat detected at: {smoothed_pos}')
+                    self.last_beat_time = current_time
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = HandTracker()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+                </pre>
+                <p class="mt-2">Full source code: <a href="https://github.com/billybongo07/robot-musician" class="text-blue-600 hover:underline">GitHub Repository</a></p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-6">
+        <div class="container mx-auto px-4 text-center">
+            <p>Created by Will Sullivan, David Allen, William Barr for [Course Name], [Semester]</p>
+            <p>Contact: <a href="mailto:your-email@example.com" class="text-blue-300 hover:underline">your-email@example.com</a></p>
+        </div>
+    </footer>
+</body>
+</html>
